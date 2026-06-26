@@ -1,8 +1,7 @@
-version: '3.8'
-
 services:
+  # --- DATABASE NO SQL (RAW DATA) ---
   mongodb:
-    image: mongo:6.0
+    image: mongo:8.0
     container_name: movie_mongodb
     ports:
       - "27017:27017"
@@ -11,6 +10,7 @@ services:
     networks:
       - movie_network
 
+  # --- MESSAGE BROKER (CODA) ---
   rabbitmq:
     image: rabbitmq:3-management
     container_name: movie_rabbitmq
@@ -19,7 +19,32 @@ services:
       - "15672:15672"
     networks:
       - movie_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # --- DATABASE A GRAFI (RACCOMANDAZIONI) ---
+  neo4j:
+    image: neo4j:5.12-community
+    container_name: movie_neo4j
+    ports:
+      - "7474:7474" # Interfaccia Web Browser
+      - "7687:7687" # Protocollo Bolt per Python
+    environment:
+      - NEO4J_AUTH=neo4j/password_sicurissima # Cambia pure la password se vuoi
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - movie_network
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "password_sicurissima", "RETURN 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- MICROSERVIZIO INGESTION ---
   ingestion_service:
     build:
       context: ./ingestion_service
@@ -28,26 +53,34 @@ services:
     env_file:
       - ./ingestion_service/.env
     depends_on:
-      - mongodb
-      - rabbitmq
-    restart: on-failure  # <-- AGGIUNGI QUESTO
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    restart: always
     networks:
       - movie_network
 
+  # --- MICROSERVIZIO PROCESSING (CONSUMER) ---
   processing_service:
     build:
       context: ./processing_service
       dockerfile: Dockerfile
     container_name: movie_processing
     depends_on:
-      - mongodb
-      - rabbitmq
-    restart: on-failure  # <-- AGGIUNGI QUESTO
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+      neo4j:
+        condition: service_healthy # Aspetta che anche Neo4j sia pronto!
+    restart: always
     networks:
       - movie_network
 
 volumes:
   mongo_data:
+  neo4j_data: # Nuovo volume persistente per il grafo
 
 networks:
   movie_network:

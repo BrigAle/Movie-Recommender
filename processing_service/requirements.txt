@@ -1,2 +1,3 @@
 pymongo==4.6.1
 pika==1.3.2
+neo4j
