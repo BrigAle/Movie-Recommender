@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: movie_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - movie_network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: movie_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - movie_network
+
+  ingestion_service:
+    build:
+      context: ./ingestion_service
+      dockerfile: Dockerfile
+    container_name: movie_ingestion
+    env_file:
+      - ./ingestion_service/.env
+    depends_on:
+      - mongodb
+      - rabbitmq
+    restart: on-failure  # <-- AGGIUNGI QUESTO
+    networks:
+      - movie_network
+
+  processing_service:
+    build:
+      context: ./processing_service
+      dockerfile: Dockerfile
+    container_name: movie_processing
+    depends_on:
+      - mongodb
+      - rabbitmq
+    restart: on-failure  # <-- AGGIUNGI QUESTO
+    networks:
+      - movie_network
+
+volumes:
+  mongo_data:
+
+networks:
+  movie_network:
+    driver: bridge
