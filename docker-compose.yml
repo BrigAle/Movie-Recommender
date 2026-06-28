@@ -78,6 +78,34 @@ services:
     networks:
       - movie_network
 
+  # --- API GATEWAY (IL PONTE PER REACT) ---
+  api_gateway:
+    build:
+      context: ./api_gateway
+      dockerfile: Dockerfile
+    container_name: movie_api_gateway
+    ports:
+      - "8000:8000"  # Mappa la porta 8000 del container sulla porta 8000 del tuo Windows
+    depends_on:
+      mongodb:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./api_gateway:/app  # Mappatura del volume per il Live-Reload del codice Python
+    networks:
+      - movie_network
+  frontend:
+    build: ./movie-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./movie-frontend:/app
+      - /app/node_modules # <--- FONDAMENTALE: Dice a Docker di non sovrascrivere questa cartella!
+    command: npm run dev -- --host
+
+
+
 volumes:
   mongo_data:
   neo4j_data: # Nuovo volume persistente per il grafo
